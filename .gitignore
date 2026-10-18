@@ -1,0 +1,6 @@
+# Large binary images and caches
+output/*.img
+output/*.img.zst
+cache/*.tar.zst
+cache/*.bin
+cache/*.img
