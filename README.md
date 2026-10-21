@@ -2,6 +2,11 @@
 
 This repository contains the complete toolkit, backups, and built images for running **Proxmox VE ARM 9** under the **EDK2 UEFI BIOS** (`edk2-rk3588`) on the **Firefly ITX-3588J** (Rockchip RK3588).
 
+The existing eMMC installation now boots through UEFI with HDMI connected.
+SSH, web UI, PVE services, local storage and KVM control-instance creation
+were verified on hardware. Its root and firmware were preserved; see the
+[migration and validation record](docs/emmc-uefi-migration.md).
+
 ---
 
 ## 1. Project Overview
@@ -16,7 +21,8 @@ This project delivers:
 2. **UEFI Bootable Image (`proxmox-ve-arm-firefly-uefi.img.zst`)**:
    - Standard GPT partition table with 512 MiB FAT32 EFI System Partition (ESP) + ext4 root partition.
    - Built with native `systemd-boot` (`BOOTAA64.EFI`) loading the vendor Linux 6.1 kernel via ARM64 EFI Stub (`CONFIG_EFI_STUB=y`).
-   - Integrated Firefly ITX-3588J Device Tree Blob (`rk3588-firefly-itx-3588j.dtb`).
+   - Firefly BSP device tree with the native HDMI UEFI handoff clock fix.
+   - Matching vendor kernel/initrd, headless recovery entry, and PVE management bridge.
    - Drive-agnostic `UUID` boot parameters (can boot from eMMC, SATA SSD, NVMe M.2 SSD, or USB).
 3. **Firmware & Deployment Scripts**:
    - `scripts/deploy-uefi-image.sh`: Flashes the UEFI image to any drive and automatically expands it to fill physical disk capacity.
@@ -71,12 +77,20 @@ See [docs/spi-nor-flashing.md](file:///home/gmb0yd911/Work/pve-firefly-uefi/docs
 5. Press **F10** to save, then **ESC** to exit and reboot.
 
 ### Step 3: Deploy the UEFI Proxmox VE Image
-While Omarchy is booted on `/dev/sda`, you can safely flash the UEFI Proxmox VE image back to the eMMC (`/dev/mmcblk0`) or an NVMe drive:
-```bash
-# Flash to eMMC (/dev/mmcblk0):
-./scripts/deploy-uefi-image.sh firefly /dev/mmcblk0
+**The current eMMC also contains UEFI firmware. Do not write a whole-disk
+image over it.** Its existing PVE root has been retained and a new ESP added
+in trailing free space. Follow the [in-place migration record](docs/emmc-uefi-migration.md)
+for its layout, backups and boot validation.
 
-# Or flash to a secondary SSD:
+The whole-image deployer refuses a target containing a recognized EDK2 FIT
+image. Whole-disk deployment is only suitable for a target whose firmware
+is already supplied by separately validated storage, for example a secondary
+SSD. Booting Omarchy from SATA does not itself establish that eMMC is safe
+to overwrite.
+
+For a separate OS disk:
+```bash
+# Flash to a secondary SSD with separately provided UEFI firmware:
 ./scripts/deploy-uefi-image.sh firefly /dev/nvme0n1
 ```
 The deploy script will:
@@ -88,3 +102,18 @@ The deploy script will:
 Once booted under UEFI:
 - **Web Console**: `https://192.168.4.243:8006/`
 - **SSH**: `ssh gmb0yd911@192.168.4.243` or `ssh root@192.168.4.243`
+
+### Rebuilding the updated image
+
+```bash
+./scripts/build-uefi-image.sh
+```
+
+The builder uses vendor `6.1.115-vendor-rk35xx` and its matching initrd,
+generates display clock holds, starts the ESP after a 16 MiB reserved gap,
+and configures `vmbr0`. Management defaults can be overridden with
+`PVE_ADDRESS`, `PVE_GATEWAY`, and `PVE_INTERFACE`. The gap is blank in the
+image; it does not preserve target firmware during a whole-disk write.
+
+The original compressed image is retained as
+`output/proxmox-ve-arm-firefly-uefi.before-clock-fix.img.zst`.

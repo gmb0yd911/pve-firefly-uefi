@@ -16,6 +16,12 @@ IMG_FILE="${OUTPUT_DIR}/${IMG_NAME}"
 
 IMG_SIZE_MIB="${IMG_SIZE_MIB:-12288}" # 12 GiB sparse image
 ESP_SIZE_MIB="${ESP_SIZE_MIB:-512}"   # 512 MiB FAT32 EFI System Partition
+ESP_START_MIB="${ESP_START_MIB:-16}"  # Reserve the Rockchip firmware boot area
+KERNEL_VERSION="${PVE_KERNEL_VERSION:-6.1.115-vendor-rk35xx}"
+[[ $ESP_START_MIB =~ ^[0-9]+$ && $ESP_START_MIB -ge 16 ]] || {
+  echo "Error: ESP_START_MIB must reserve at least the first 16 MiB." >&2
+  exit 1
+}
 
 echo "===================================================================="
 echo " Proxmox VE ARM: EDK2 UEFI Image Builder (Firefly ITX-3588J)"
@@ -28,7 +34,7 @@ echo " Bootloader:     systemd-boot (BOOTAA64.EFI) + Device Tree Stub"
 echo "===================================================================="
 
 # Check dependencies
-for cmd in parted losetup mkfs.vfat mkfs.ext4 tar zstd blkid; do
+for cmd in parted losetup mkfs.vfat mkfs.ext4 tar zstd blkid fdtget fdtput python3; do
   if ! command -v "$cmd" &>/dev/null; then
     echo "Error: Required command '$cmd' is not installed." >&2
     exit 1
@@ -57,10 +63,10 @@ cleanup() {
     sudo umount -f "${MOUNT_ROOT}"
   fi
   if [[ -n "${MOUNT_ROOT}" && -d "${MOUNT_ROOT}" ]]; then
-    rm -rf "${MOUNT_ROOT}"
+    rmdir "${MOUNT_ROOT}" 2>/dev/null || true
   fi
   if [[ -n "${MOUNT_ESP}" && -d "${MOUNT_ESP}" ]]; then
-    rm -rf "${MOUNT_ESP}"
+    rmdir "${MOUNT_ESP}" 2>/dev/null || true
   fi
   if [[ -n "${LOOP_DEV}" && -b "${LOOP_DEV}" ]]; then
     sudo losetup -d "${LOOP_DEV}" 2>/dev/null || true
@@ -75,15 +81,17 @@ rm -f "${IMG_FILE}"
 truncate -s "${IMG_SIZE_MIB}M" "${IMG_FILE}"
 
 # 2. Partition with standard GPT
-# Partition 1: FAT32 ESP (1MiB to 513MiB), boot & esp flags
-# Partition 2: ext4 Linux filesystem (513MiB to 100%)
+# The reserved gap does not contain firmware. Whole-disk flashing still
+# overwrites firmware on an existing target; use in-place conversion there.
+# Partition 1: FAT32 ESP, starting after the reserved 16 MiB boot area.
+# Partition 2: ext4 Linux filesystem following the ESP.
 echo "[2/6] Partitioning disk image with standard UEFI GPT..."
 parted -s "${IMG_FILE}" mklabel gpt
-parted -s "${IMG_FILE}" mkpart primary fat32 1MiB "$((1 + ESP_SIZE_MIB))MiB"
+parted -s "${IMG_FILE}" mkpart primary fat32 "${ESP_START_MIB}MiB" "$((ESP_START_MIB + ESP_SIZE_MIB))MiB"
 parted -s "${IMG_FILE}" name 1 "EFI"
 parted -s "${IMG_FILE}" set 1 boot on
 parted -s "${IMG_FILE}" set 1 esp on
-parted -s "${IMG_FILE}" mkpart primary ext4 "$((1 + ESP_SIZE_MIB))MiB" 100%
+parted -s "${IMG_FILE}" mkpart primary ext4 "$((ESP_START_MIB + ESP_SIZE_MIB))MiB" 100%
 parted -s "${IMG_FILE}" name 2 "pve_root"
 
 # 3. Attach loop device
@@ -136,7 +144,7 @@ else
 fi
 
 # Find kernel, initramfs, and DTB from extracted rootfs
-KERNEL_SRC=$(ls -1 "${MOUNT_ROOT}/boot"/vmlinuz-* 2>/dev/null | head -n1 || true)
+KERNEL_SRC="${MOUNT_ROOT}/boot/vmlinuz-${KERNEL_VERSION}"
 if [[ -z "${KERNEL_SRC}" || ! -f "${KERNEL_SRC}" ]]; then
   echo "Error: Kernel binary not found in rootfs /boot" >&2
   exit 1
@@ -145,7 +153,7 @@ KERNEL_NAME=$(basename "${KERNEL_SRC}")
 echo "Kernel: ${KERNEL_NAME}"
 sudo cp "${KERNEL_SRC}" "${MOUNT_ESP}/${KERNEL_NAME}"
 
-INITRD_SRC=$(ls -1 "${MOUNT_ROOT}/boot"/initrd.img-* 2>/dev/null | head -n1 || true)
+INITRD_SRC="${MOUNT_ROOT}/boot/initrd.img-${KERNEL_VERSION}"
 if [[ -z "${INITRD_SRC}" || ! -f "${INITRD_SRC}" ]]; then
   echo "Error: Initramfs not found in rootfs /boot" >&2
   exit 1
@@ -165,12 +173,18 @@ if [[ -z "${DTB_SRC}" || ! -f "${DTB_SRC}" ]]; then
   fi
 fi
 echo "Device Tree: ${DTB_SRC}"
-sudo cp "${DTB_SRC}" "${MOUNT_ESP}/dtb/rockchip/rk3588-firefly-itx-3588j.dtb"
+# Reject the older firmware binding: this generator expects the vendor BSP
+# PHY clock providers on the PHY nodes themselves.
+for phy in /hdmiphy@fed60000 /hdmiphy@fed70000; do
+  sudo fdtget -t s "${DTB_SRC}" "$phy" clock-output-names >/dev/null
+done
+sudo bash "${SCRIPT_DIR}/build-uefi-clock-hold-dtb.sh" "${DTB_SRC}" \
+  "${MOUNT_ESP}/dtb/rockchip/rk3588-firefly-itx-3588j.dtb"
 
 # Write systemd-boot loader configuration
 sudo tee "${MOUNT_ESP}/loader/loader.conf" >/dev/null <<EOF
 default proxmox.conf
-timeout 3
+timeout 5
 console-mode max
 editor no
 EOF
@@ -181,7 +195,15 @@ title      Proxmox VE ARM 9 (Firefly ITX-3588J UEFI)
 linux      /${KERNEL_NAME}
 initrd     /${INITRD_NAME}
 devicetree /dtb/rockchip/rk3588-firefly-itx-3588j.dtb
-options    root=UUID=${ROOT_UUID} rootwait rw console=tty1 console=ttyS2,1500000 cma=256M cgroup_enable=cpuset cgroup_memory=1 cgroup_enable=memory usb-storage.quirks=0x2537:0x1066:u,0x2537:0x1068:u
+options    root=UUID=${ROOT_UUID} rootwait rw rootfstype=ext4 console=tty1 console=ttyS2,1500000 cma=256M panic=10 cgroup_enable=cpuset cgroup_memory=1 cgroup_enable=memory usb-storage.quirks=0x2537:0x1066:u,0x2537:0x1068:u
+EOF
+
+# Retain the firmware-tree path that successfully boots headless on this board.
+sudo tee "${MOUNT_ESP}/loader/entries/proxmox-headless.conf" >/dev/null <<EOF
+title      Proxmox VE ARM 9 (Headless SSH Recovery)
+linux      /${KERNEL_NAME}
+initrd     /${INITRD_NAME}
+options    root=UUID=${ROOT_UUID} rootwait rw rootfstype=ext4 console=ttyS2,1500000 console=tty1 cma=256M cgroup_enable=cpuset cgroup_memory=1 cgroup_enable=memory usb-storage.quirks=0x2537:0x1066:u,0x2537:0x1068:u
 EOF
 
 # Update rootfs /etc/fstab with the new UUIDs
@@ -196,6 +218,10 @@ EOF
 # Ensure symlinks in rootfs /vmlinuz and /initrd.img point to boot/${KERNEL_NAME}
 sudo ln -sf "boot/${KERNEL_NAME}" "${MOUNT_ROOT}/vmlinuz"
 sudo ln -sf "boot/${INITRD_NAME}" "${MOUNT_ROOT}/initrd.img"
+
+# Preserve this project's management address while using the PVE-native bridge.
+sudo bash "${SCRIPT_DIR}/configure-pve-network.sh" "${MOUNT_ROOT}" \
+  "${PVE_ADDRESS:-192.168.4.243/24}" "${PVE_GATEWAY:-192.168.4.1}" "${PVE_INTERFACE:-end0}"
 
 sync
 echo "===================================================================="

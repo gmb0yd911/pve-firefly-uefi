@@ -11,6 +11,14 @@ OUTPUT_DIR="${WORK_DIR}/output"
 
 SSH_TARGET="${1:-firefly}"
 TARGET_DEV="${2:-/dev/mmcblk0}" # Default target: eMMC
+[[ $TARGET_DEV =~ ^/dev/(mmcblk[0-9]+|sd[a-z]+|nvme[0-9]+n[0-9]+)$ ]] || {
+  echo "Error: Specify a whole disk device, such as /dev/mmcblk0." >&2
+  exit 1
+}
+
+ssh_target() {
+  ssh -F "${SSH_CONFIG:-${HOME}/.ssh/config}" -o ConnectTimeout=10 "${SSH_TARGET}" "$@"
+}
 
 IMG_FILE=$(ls -1 "${OUTPUT_DIR}"/proxmox-ve-arm-firefly-uefi.img.zst \
                  "${OUTPUT_DIR}"/proxmox-ve-arm-firefly-uefi.img 2>/dev/null | head -n1 || true)
@@ -30,11 +38,15 @@ fi
 
 # 1. Test SSH connectivity
 echo "Checking connection to ${SSH_TARGET}..."
-ssh -o ConnectTimeout=5 "${SSH_TARGET}" "hostname && uname -a"
+ssh_target "hostname && uname -a"
+
+# Run before any unmount or write, even when the live root is on another disk.
+# Booting Omarchy from SATA does not mean eMMC firmware can be overwritten.
+ssh_target "sudo -n python3 - '${TARGET_DEV}'" < "${SCRIPT_DIR}/check-firmware-header.py"
 
 # 2. Safety check: Ensure target drive is NOT the currently mounted root drive
 echo "Verifying target drive safety..."
-ssh "${SSH_TARGET}" bash <<CHECKSAFETY
+ssh_target bash <<CHECKSAFETY
   set -e
   ROOT_DEV=\$(findmnt -n -o SOURCE / || true)
   if [[ "\${ROOT_DEV}" == "${TARGET_DEV}"* ]]; then
@@ -62,13 +74,13 @@ fi
 
 echo "Streaming image to ${TARGET_DEV}..."
 if [[ "${IMG_FILE}" == *.zst ]]; then
-  zstd -dc "${IMG_FILE}" | ssh "${SSH_TARGET}" "sudo dd of=${TARGET_DEV} bs=4M status=progress conv=fsync"
+  zstd -dc "${IMG_FILE}" | ssh_target "sudo dd of=${TARGET_DEV} bs=4M status=progress conv=fsync"
 else
-  cat "${IMG_FILE}" | ssh "${SSH_TARGET}" "sudo dd of=${TARGET_DEV} bs=4M status=progress conv=fsync"
+  cat "${IMG_FILE}" | ssh_target "sudo dd of=${TARGET_DEV} bs=4M status=progress conv=fsync"
 fi
 
 echo "Fixing GPT secondary header at disk end..."
-ssh "${SSH_TARGET}" bash <<EXPAND
+ssh_target bash <<EXPAND
   set -e
   # Repair GPT header location
   sudo sgdisk -e "${TARGET_DEV}" 2>/dev/null || sudo parted -s "${TARGET_DEV}" ---pretend-input-tty print Fix || true

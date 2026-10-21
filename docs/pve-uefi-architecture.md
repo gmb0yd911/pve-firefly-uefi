@@ -2,6 +2,14 @@
 
 This document describes how the Proxmox VE ARM system has been backed up and transformed from the vendor U-Boot flow to a modern, standard EDK2 UEFI boot architecture on the **Firefly ITX-3588J** (Rockchip RK3588).
 
+The current eMMC conversion preserves its existing root and firmware and
+adds a trailing ESP. See [the migration record](emmc-uefi-migration.md) for
+the deployed layout and successful hardware boot validation. The image builder
+described below now reserves 16 MiB before its ESP, applies the native HDMI
+clock holds, adds headless recovery, and configures an ifupdown2 bridge.
+An image's reserved gap is blank: whole-disk deployment still overwrites
+target firmware and is refused when the deployer recognizes EDK2 there.
+
 ---
 
 ## 1. Traditional Rockchip U-Boot vs. EDK2 UEFI Architecture

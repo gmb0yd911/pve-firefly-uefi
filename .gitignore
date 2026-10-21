@@ -4,3 +4,5 @@ output/*.img.zst
 cache/*.tar.zst
 cache/*.bin
 cache/*.img
+cache/itx-3588j-uefi.dtb
+__pycache__/
