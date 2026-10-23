@@ -117,3 +117,8 @@ image; it does not preserve target firmware during a whole-disk write.
 
 The original compressed image is retained as
 `output/proxmox-ve-arm-firefly-uefi.before-clock-fix.img.zst`.
+
+## Related
+
+- [fedora-firefly-uefi](https://github.com/gmb0yd911/fedora-firefly-uefi): Fedora Cinnamon with a Btrfs root, booting on the SATA SSD through the
+  same EDK2 UEFI firmware with Fedora's mainline kernel and device tree.
