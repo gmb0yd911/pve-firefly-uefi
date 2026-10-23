@@ -27,7 +27,9 @@ The first 64 KiB includes GPT metadata and was excluded from that comparison.
 The new ESP contains systemd-boot 261.2, matched vendor 6.1.115 kernel and
 PVE initrd, a board tree with the seven validated VOP clock holds, and:
 
-- `proxmox.conf`: native HDMI with the patched device tree, default.
+- `proxmox.conf`: native HDMI with the patched device tree; default until
+  2026-10-23, now the fallback behind the
+  [Debian mainline entry](mainline-kernel.md).
 - `proxmox-headless.conf`: firmware device tree, SSH/serial recovery.
 
 The PVE kernel is byte-identical to the kernel validated under Omarchy:

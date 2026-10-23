@@ -1,0 +1,69 @@
+#!/bin/sh
+# firefly-esp-mainline: copy the newest installed Debian mainline kernel,
+# its initramfs and the board DTB to the ESP and point the
+# proxmox-mainline.conf systemd-boot entry at them.
+#
+# Installed as /usr/local/sbin/firefly-esp-mainline and run from the kernel
+# postinst/postrm and initramfs post-update hooks. Arguments are ignored: it
+# always syncs the newest kernel that has /boot and /lib/modules files.
+# With no mainline kernel left, it removes the entry and makes the vendor
+# entry (proxmox.conf) the default again.
+set -eu
+
+ESP=/boot/efi
+DIR=${ESP}/mainline
+ENTRY=${ESP}/loader/entries/proxmox-mainline.conf
+LOADER=${ESP}/loader/loader.conf
+DTB=rockchip/rk3588-firefly-itx-3588j.dtb
+CMDLINE_FILE=/etc/kernel/firefly-mainline-cmdline
+
+if ! mountpoint -q "${ESP}"; then
+  echo "firefly-esp-mainline: ${ESP} is not mounted; ESP not updated." >&2
+  exit 1
+fi
+
+newest=""
+for v in $(linux-version list | linux-version sort); do
+  case "${v}" in *-vendor-*) continue ;; esac
+  [ -f "/boot/vmlinuz-${v}" ] && [ -f "/boot/initrd.img-${v}" ] && [ -d "/lib/modules/${v}" ] || continue
+  for d in "/usr/lib/linux-image-${v}/${DTB}" "/usr/lib/modules/${v}/dtb/${DTB}"; do
+    [ -f "${d}" ] && newest=${v} && dtb_src=${d} && break
+  done
+done
+
+if [ -z "${newest}" ]; then
+  rm -f "${ENTRY}"
+  rm -rf "${DIR}"
+  sed -i 's/^default .*/default proxmox.conf/' "${LOADER}"
+  echo "firefly-esp-mainline: no mainline kernel left; default is proxmox.conf." >&2
+  exit 0
+fi
+
+copy() {  # copy only when changed, to spare eMMC writes
+  cmp -s "$1" "$2" 2>/dev/null && return 0
+  mkdir -p "$(dirname "$2")"
+  cp "$1" "$2.new" && mv "$2.new" "$2"
+}
+copy "/boot/vmlinuz-${newest}" "${DIR}/vmlinuz-${newest}"
+copy "/boot/initrd.img-${newest}" "${DIR}/initrd.img-${newest}"
+copy "${dtb_src}" "${DIR}/${DTB}"
+for f in "${DIR}"/vmlinuz-* "${DIR}"/initrd.img-*; do
+  case "${f}" in *"-${newest}") ;; *) rm -f "${f}" ;; esac
+done
+
+options=$(grep -v '^#' "${CMDLINE_FILE}" | tr '\n' ' ' | sed 's/  */ /g; s/ $//')
+cat > "${ENTRY}.new" <<ENTRY_EOF
+title Proxmox VE ARM (eMMC, Debian mainline ${newest})
+linux /mainline/vmlinuz-${newest}
+initrd /mainline/initrd.img-${newest}
+devicetree /mainline/${DTB}
+options ${options}
+ENTRY_EOF
+cmp -s "${ENTRY}.new" "${ENTRY}" && rm -f "${ENTRY}.new" || mv "${ENTRY}.new" "${ENTRY}"
+
+# Armbian's 99-uboot hook repoints /boot/uInitrd at whichever initramfs was
+# last built; keep the U-Boot fallback paired with the vendor kernel.
+vendor_uinitrd=$(ls /boot/uInitrd-*-vendor-* 2>/dev/null | sort -V | tail -n1 || true)
+[ -n "${vendor_uinitrd}" ] && ln -sfn "$(basename "${vendor_uinitrd}")" /boot/uInitrd
+
+echo "firefly-esp-mainline: ESP entry uses ${newest}." >&2

@@ -1,0 +1,4 @@
+#!/bin/sh
+# /etc/kernel/postinst.d/zz-firefly-esp-mainline and
+# /etc/kernel/postrm.d/zz-firefly-esp-mainline
+exec /usr/local/sbin/firefly-esp-mainline "$@"

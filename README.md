@@ -7,6 +7,11 @@ SSH, web UI, PVE services, local storage and KVM control-instance creation
 were verified on hardware. Its root and firmware were preserved; see the
 [migration and validation record](docs/emmc-uefi-migration.md).
 
+It now boots Debian's mainline `7.2.9+deb13-arm64` kernel with its in-tree
+device tree by default; the vendor 6.1 entry remains as a fallback. See
+[docs/mainline-kernel.md](docs/mainline-kernel.md) for the setup, the ESP
+sync hook and what is unavailable under mainline (notably pve-firewall).
+
 ---
 
 ## 1. Project Overview
@@ -40,8 +45,9 @@ This project delivers:
 │   ├── rk3588-firefly-itx-3588j.dtb    # Hardware Device Tree Blob (272 KiB)
 │   └── systemd-bootaa64.efi            # ARM64 UEFI systemd-boot binary (168 KiB)
 ├── config/
-│   └── (optional override configs)
+│   └── mainline-kernel/                # ESP sync hook, kernel options, EDID, systemd drop-in
 ├── docs/
+│   ├── mainline-kernel.md              # Debian mainline kernel default entry and its limits
 │   ├── pve-uefi-architecture.md        # Technical architecture comparison (U-Boot vs UEFI)
 │   ├── spi-nor-flashing.md             # Guide to flashing EDK2 UEFI to SPI NOR
 │   └── recovery-and-uboot-fallback.md  # Step-by-step restoration to legacy U-Boot

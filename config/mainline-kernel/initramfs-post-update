@@ -1,0 +1,3 @@
+#!/bin/sh
+# /etc/initramfs/post-update.d/firefly-esp-mainline (runs after 99-uboot)
+exec /usr/local/sbin/firefly-esp-mainline "$@"
