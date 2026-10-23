@@ -112,8 +112,9 @@ Booted the mainline entry from the systemd-boot menu:
 
 After it was made the default, the hook was exercised with
 `update-initramfs -u`: the ESP initramfs matched `/boot` and `uInitrd` was
-restored to the vendor file. Booting it as the default without using the
-menu has not been observed yet.
+restored to the vendor file. A following unattended boot selected
+`proxmox-mainline.conf` (`LoaderEntrySelected`) and reached `running` with
+the same services, `vmbr0`, `/dev/kvm` and 240 MHz HDMI.
 
 ## Not available under mainline
 
