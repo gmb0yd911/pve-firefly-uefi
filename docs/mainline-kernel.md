@@ -149,9 +149,12 @@ cancelled after these checks from 192.168.4.222:
 
 The ruleset is `table inet proxmox-firewall`. `pve-firewall status` shows
 `enabled/running (pending changes)`. That status reflects the legacy
-iptables ruleset, which nftables mode does not apply. Not tested yet: a
-reboot with the firewall enabled, the vendor kernel in nftables mode, and
-guest (bridge) rules.
+iptables ruleset, which nftables mode does not apply.
+
+After a reboot with the firewall enabled, the system reached `running`.
+`proxmox-firewall` loaded its table, pve-firewall logged no errors, and
+SSH and the web UI were reachable while ping was refused. Not tested yet:
+the vendor kernel in nftables mode, and guest (bridge) rules.
 
 If access is lost, disable it at the console: `pvesh set
 /cluster/firewall/options --enable 0`. Alternatively, set `enable: 0` in
