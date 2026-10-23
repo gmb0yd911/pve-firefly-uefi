@@ -10,7 +10,8 @@ were verified on hardware. Its root and firmware were preserved; see the
 It now boots Debian's mainline `7.2.9+deb13-arm64` kernel with its in-tree
 device tree by default; the vendor 6.1 entry remains as a fallback. See
 [docs/mainline-kernel.md](docs/mainline-kernel.md) for the setup, the ESP
-sync hook and what is unavailable under mainline (notably pve-firewall).
+sync hook, the nftables firewall (`proxmox-firewall`) and what is
+unavailable under mainline.
 
 ---
 

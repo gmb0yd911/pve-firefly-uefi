@@ -55,6 +55,7 @@ Files from `config/mainline-kernel/` in this repository are installed as:
 | `firefly-mainline-cmdline` | `/etc/kernel/firefly-mainline-cmdline` |
 | `dell_p2720dc-240mhz.bin` | `/usr/lib/firmware/edid/dell_p2720dc-240mhz.bin` |
 | `systemd/rk3588-bluetooth.service.d/vendor-kernel-only.conf` | `/etc/systemd/system/rk3588-bluetooth.service.d/` |
+| `systemd/pve-firewall.service.d/ebtables-nft.conf` | `/etc/systemd/system/pve-firewall.service.d/` |
 
 The vendor `ttyFIQ0` getty was moved from `getty.target.wants/` to
 `/etc/systemd/system/dev-ttyFIQ0.device.wants/`:
@@ -116,15 +117,48 @@ restored to the vendor file. A following unattended boot selected
 `proxmox-mainline.conf` (`LoaderEntrySelected`) and reached `running` with
 the same services, `vmbr0`, `/dev/kvm` and 240 MHz HDMI.
 
+## Firewall (nftables mode)
+
+The legacy firewall cannot run on this kernel. `pve-firewall.service` forces
+`ebtables-legacy` (`ExecStartPre=update-alternatives --set ebtables
+…-legacy`), and Debian's 7.2 config does not set
+`CONFIG_BRIDGE_NF_EBTABLES_LEGACY`. Since 2026-10-23 the firewall therefore
+runs on the nftables-based `proxmox-firewall`:
+
+```bash
+sudo apt-get install --no-install-recommends proxmox-firewall   # 1.2.3, pulls nftables
+printf '[OPTIONS]\n\nnftables: 1\n' | sudo tee /etc/pve/nodes/pve/host.fw
+sudo pvesh set /cluster/firewall/options --enable 1
+```
+
+In nftables mode, pve-firewall still applies an empty ebtables ruleset
+every 10 s to clean up legacy chains. With the legacy backend that logged
+`Module ebtables not found` each time. The `ebtables-nft.conf` drop-in
+replaces the unit's `ExecStartPre` list. It keeps the `iptables`/`ip6tables`
+legacy settings and points only `ebtables` at nft. After it was installed,
+pve-firewall logged no errors.
+
+The datacenter firewall was enabled with a 5-minute `systemd-run` rollback
+armed (`pvesh set /cluster/firewall/options --enable 0`). The rollback was
+cancelled after these checks from 192.168.4.222:
+
+- a new SSH connection succeeded;
+- `https://192.168.4.243:8006/` returned 200;
+- ping is refused: PVE's default input policy drops all traffic except
+  management access (`v4-dc/management`, detected as `192.168.4.0/24`).
+
+The ruleset is `table inet proxmox-firewall`. `pve-firewall status` shows
+`enabled/running (pending changes)`. That status reflects the legacy
+iptables ruleset, which nftables mode does not apply. Not tested yet: a
+reboot with the firewall enabled, the vendor kernel in nftables mode, and
+guest (bridge) rules.
+
+If access is lost, disable it at the console: `pvesh set
+/cluster/firewall/options --enable 0`. Alternatively, set `enable: 0` in
+`/etc/pve/firewall/cluster.fw`.
+
 ## Not available under mainline
 
-- **PVE firewall.** `pve-firewall.service` forces `ebtables-legacy`
-  (`ExecStartPre=update-alternatives --set ebtables …-legacy`). Debian's 7.2
-  config does not set `CONFIG_BRIDGE_NF_EBTABLES_LEGACY`, so pve-firewall
-  logs `Module ebtables not found` every 10 s and cannot apply bridge rules.
-  The firewall is disabled and no guests exist. The nftables-based
-  `proxmox-firewall` (1.2.3 in the PVE repository) is the supported route;
-  it is not installed.
 - **ZFS** (no module; see above).
 - **Bluetooth/Wi-Fi**: the mainline DT has no UART6 or Bluetooth node.
 - **NPU and vendor video decoding** (rkmpp).
