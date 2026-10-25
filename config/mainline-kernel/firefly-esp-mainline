@@ -46,7 +46,16 @@ copy() {  # copy only when changed, to spare eMMC writes
 }
 copy "/boot/vmlinuz-${newest}" "${DIR}/vmlinuz-${newest}"
 copy "/boot/initrd.img-${newest}" "${DIR}/initrd.img-${newest}"
-copy "${dtb_src}" "${DIR}/${DTB}"
+
+# Add the AP6275P Wi-Fi/Bluetooth description; see firefly-dt-ap6275p.
+dtb_tmp=$(mktemp)
+trap 'rm -f "${dtb_tmp}"' EXIT
+if [ -x /usr/local/sbin/firefly-dt-ap6275p ]; then
+  /usr/local/sbin/firefly-dt-ap6275p "${dtb_src}" "${dtb_tmp}"
+else
+  cp "${dtb_src}" "${dtb_tmp}"
+fi
+copy "${dtb_tmp}" "${DIR}/${DTB}"
 for f in "${DIR}"/vmlinuz-* "${DIR}"/initrd.img-*; do
   case "${f}" in *"-${newest}") ;; *) rm -f "${f}" ;; esac
 done

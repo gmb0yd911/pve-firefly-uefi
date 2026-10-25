@@ -56,6 +56,9 @@ Files from `config/mainline-kernel/` in this repository are installed as:
 | `dell_p2720dc-240mhz.bin` | `/usr/lib/firmware/edid/dell_p2720dc-240mhz.bin` |
 | `systemd/rk3588-bluetooth.service.d/vendor-kernel-only.conf` | `/etc/systemd/system/rk3588-bluetooth.service.d/` |
 | `systemd/pve-firewall.service.d/ebtables-nft.conf` | `/etc/systemd/system/pve-firewall.service.d/` |
+| `firefly-dt-ap6275p` | `/usr/local/sbin/firefly-dt-ap6275p` |
+| `brcmfmac-after-bt.conf` | `/etc/modprobe.d/brcmfmac-after-bt.conf` |
+| `brcmfmac-after-bt.service` | `/etc/systemd/system/`, enabled (wanted by `sys-subsystem-bluetooth-devices-hci0.device`) |
 
 The vendor `ttyFIQ0` getty was moved from `getty.target.wants/` to
 `/etc/systemd/system/dev-ttyFIQ0.device.wants/`:
@@ -75,7 +78,9 @@ The ESP holds copies of the kernel, initramfs and DTB. `firefly-esp-mainline`
 runs after every kernel install or removal and every `update-initramfs`, and:
 
 - copies the newest installed non-vendor kernel, its initramfs and DTB to
-  `/boot/efi/mainline/`, only when they changed, and deletes older copies;
+  `/boot/efi/mainline/`, only when they changed, and deletes older copies.
+  The DTB is passed through `firefly-dt-ap6275p` first (see
+  [Wi-Fi and Bluetooth](#wi-fi-and-bluetooth-ap6275p));
 - rewrites `proxmox-mainline.conf` with the options in
   `/etc/kernel/firefly-mainline-cmdline` (edit that file, not the entry);
 - puts `/boot/uInitrd` back on the vendor initramfs, because Armbian's
@@ -160,10 +165,60 @@ If access is lost, disable it at the console: `pvesh set
 /cluster/firewall/options --enable 0`. Alternatively, set `enable: 0` in
 `/etc/pve/firewall/cluster.fw`.
 
+## Wi-Fi and Bluetooth (AP6275P)
+
+The board's AP6275P module is a BCM43752: Wi-Fi on `pcie2x1l0`
+(`/pcie@fe170000`), Bluetooth on UART6 (`/serial@feb90000`). The mainline
+DT describes neither, and also enables `sata1` (`/sata@fe220000`), which
+shares combo PHY 1 with `pcie2x1l0`. The built-in AHCI driver takes the PHY
+first, so the Wi-Fi link never trains (`Device not found`). The vendor DT
+disables `sata1`, and nothing is connected to it.
+
+`firefly-dt-ap6275p IN OUT` adds the wiring from the vendor DT. It works
+by node path, because Debian's DTBs have no `__symbols__` and leave out
+unreferenced pin groups. It:
+
+- disables `sata1`;
+- adds a `regulator-fixed` on GPIO0_C4 (WL_REG_ON) as the slot's
+  `vpcie3v3-supply`;
+- enables UART6 with the m1 RTS/CTS pins, adding the missing
+  `uart6m1-ctsn`/`-rtsn` groups;
+- adds a `brcm,bcm4345c5` serdev node with BT_REG_ON (GPIO0_C6) as
+  `shutdown-gpios`, BT_WAKE (GPIO0_C5) and the hym8563 32 kHz output as
+  its `lpo` clock.
+
+The Wi-Fi firmware fails to start (`FW failed to initialize`) unless that
+LPO is already running, and `hci_uart_bcm` is what enables it. So
+`brcmfmac` is blacklisted for automatic loading, and
+`brcmfmac-after-bt.service` loads it once `hci0` exists.
+
+Packages and firmware:
+
+- `bluez` was installed (Armbian's `5.82-1.1+rpt2`, the candidate from the
+  configured repositories).
+- Firmware comes from the installed `armbian-firmware`:
+  `brcm/brcmfmac43752-pcie.{bin,clm_blob,txt}` and `brcm/BCM4362A2.hcd`.
+- `fdtput`/`fdtget` come from `device-tree-compiler`, which was already
+  installed.
+
+The previous ESP sync script and DTB are kept in `/root/*.before-ap6275p`.
+
+The same script and service run on the Arch Linux ARM install on the M.2
+SSD (`linux-aarch64` 7.2.11). There, on 2026-10-25:
+
+- `0002:21:00.0 [14e4:449d]` enumerated;
+- `brcmfmac` started firmware 18.35.387.23.146 and `wlP2p33s0` scanned
+  2.4/5 GHz networks;
+- Bluetooth reported `BCM43752A2 … AP6398` with `hci0` powered.
+
+On PVE the files were installed from a chroot and the ESP DTB was
+regenerated. A PVE boot with them has not been observed yet. The vendor
+kernel is not affected: the DTB patch is applied only to the mainline
+entry, and the service has `ConditionKernelVersion=!*-vendor-*`.
+
 ## Not available under mainline
 
 - **ZFS** (no module; see above).
-- **Bluetooth/Wi-Fi**: the mainline DT has no UART6 or Bluetooth node.
 - **NPU and vendor video decoding** (rkmpp).
 - **Stable Ethernet MAC**: the mainline DT supplies none, so the MAC is
   random on every boot. The static address on `vmbr0` is not affected.
