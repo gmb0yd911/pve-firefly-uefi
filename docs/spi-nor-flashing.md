@@ -80,7 +80,9 @@ If you wish to use EDK2 UEFI without touching SPI NOR, you can flash EDK2 direct
 
 When booting into EDK2 UEFI for the first time:
 
-1. Connect an HDMI display to **HDMI Output 1** (top port) and connect a USB keyboard.
+1. Connect an HDMI display to the **bottom HDMI port (HDMI0)** and connect a USB keyboard.
+   EDK2 shows its menu on either port, but mainline Linux drives only HDMI0; the top
+   port is HDMI1 (`fdea0000`), which mainline device trees leave disabled.
 2. Power on the Firefly board.
 3. Tap **ESC** or **F2** repeatedly as soon as power is applied to enter the **EDK2 Setup Utility**.
 4. Navigate using arrow keys to:

@@ -74,7 +74,9 @@ See [docs/spi-nor-flashing.md](file:///home/gmb0yd911/Work/pve-firefly-uefi/docs
 ```
 
 ### Step 2: Configure UEFI BIOS Settings
-1. Connect an HDMI display to **HDMI Output 1** (top port) and connect a USB keyboard.
+1. Connect an HDMI display to the **bottom HDMI port (HDMI0)** and connect a USB keyboard.
+   EDK2 shows its menu on either port, but mainline Linux drives only HDMI0; the top
+   port is HDMI1 (`fdea0000`), which mainline device trees leave disabled.
 2. Power on the Firefly board and press **ESC** or **F2** to enter UEFI Setup.
 3. Navigate to:
    ```
