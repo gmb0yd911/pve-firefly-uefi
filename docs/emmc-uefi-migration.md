@@ -1,5 +1,10 @@
 # Preserve the existing eMMC installation when adding UEFI boot
 
+> This installation was overwritten on 2026-11-15. The eMMC now holds the
+> restored image, with root UUID `4d72ea76-…` and the ESP as p2; see
+> [the restore record](emmc-image-restore.md). The record below is
+> historical.
+
 The Firefly was prepared in place on 2026-10-21. Its existing PVE root and
 EDK2 firmware were retained. A whole-disk image was not written to eMMC.
 

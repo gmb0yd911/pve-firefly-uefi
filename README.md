@@ -7,6 +7,10 @@ SSH, web UI, PVE services, local storage and KVM control-instance creation
 were verified on hardware. Its root and firmware were preserved; see the
 [migration and validation record](docs/emmc-uefi-migration.md).
 
+On 2026-11-15 that installation was lost to U-Boot testing. PVE was
+restored to eMMC from the built image, writing only past the first 16 MiB
+so that EDK2 was left untouched. See [the restore record](docs/emmc-image-restore.md).
+
 It now boots Debian's mainline `7.2.9+deb13-arm64` kernel with its in-tree
 device tree by default; the vendor 6.1 entry remains as a fallback. See
 [docs/mainline-kernel.md](docs/mainline-kernel.md) for the setup, the ESP

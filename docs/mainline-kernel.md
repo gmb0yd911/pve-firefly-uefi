@@ -31,8 +31,10 @@ reboots into the default entry again; choose the vendor entry from the menu.
 ## Installation
 
 The kernel was installed from Fedora on the SATA disk, in a native aarch64
-chroot of the eMMC root (`/dev/mmcblk0p1` with the ESP at `/boot/efi`). It
-can equally be installed from a running PVE:
+chroot of the eMMC root (`/dev/mmcblk0p1` with the ESP at `/boot/efi`).
+After the 2026-11-15 restore it was reinstalled from the running PVE
+(root on `/dev/mmcblk0p3`, ESP moved to `/boot/efi`; see
+[the restore record](emmc-image-restore.md)):
 
 ```bash
 sudo apt-get install --no-install-recommends \
