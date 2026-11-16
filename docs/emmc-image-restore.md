@@ -122,3 +122,16 @@ The AP6275P setup was therefore removed from PVE on 2026-11-16:
 - The vendor `rk3588-bluetooth.service` was disabled.
 
 This takes effect at the next boot. `bluez` stays installed.
+
+On 2026-11-16 the Beryllium wiki's ITX-3588J Bluetooth fix
+(<https://wiki.beryllium.gr/itx-3588j/Bluetooth-Fix>) was tested under the
+vendor kernel. Its fix is to run `brcm_patchram_plus` on `/dev/ttyS6`
+instead of `ttyS9`. Armbian's `rk3588-bluetooth.service` already does that,
+with the same options and `BCM4362A2.hcd`. Its remaining step, an rfkill
+block, 2 s wait and unblock, was done through `/sys/class/rfkill/rfkill0`
+(`bt_default`). The `rfkill` tool is not installed. The vendor driver logged
+the full sequence: power off, wake_host high, RTS toggled, power on.
+`brcm_patchram_plus_rk3399 -d … --baudrate 1500000 --patchram
+/lib/firmware/brcm/BCM4362A2.hcd /dev/ttyS6` then sent HCI Reset
+(`01 03 0c 00`) repeatedly for 45 s, and 60 s in a run without the power
+cycle. The chip never replied.
