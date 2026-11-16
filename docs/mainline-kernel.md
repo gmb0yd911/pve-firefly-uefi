@@ -58,9 +58,9 @@ Files from `config/mainline-kernel/` in this repository are installed as:
 | `dell_p2720dc-240mhz.bin` | `/usr/lib/firmware/edid/dell_p2720dc-240mhz.bin` |
 | `systemd/rk3588-bluetooth.service.d/vendor-kernel-only.conf` | `/etc/systemd/system/rk3588-bluetooth.service.d/` |
 | `systemd/pve-firewall.service.d/ebtables-nft.conf` | `/etc/systemd/system/pve-firewall.service.d/` |
-| `firefly-dt-ap6275p` | `/usr/local/sbin/firefly-dt-ap6275p` |
-| `brcmfmac-after-bt.conf` | `/etc/modprobe.d/brcmfmac-after-bt.conf` |
-| `brcmfmac-after-bt.service` | `/etc/systemd/system/`, enabled (wanted by `sys-subsystem-bluetooth-devices-hci0.device`) |
+| `firefly-dt-ap6275p` | `/usr/local/sbin/firefly-dt-ap6275p` (not installed since 2026-11-16) |
+| `brcmfmac-after-bt.conf` | `/etc/modprobe.d/brcmfmac-after-bt.conf` (not installed since 2026-11-16) |
+| `brcmfmac-after-bt.service` | `/etc/systemd/system/`, enabled (wanted by `sys-subsystem-bluetooth-devices-hci0.device`); not installed since 2026-11-16 |
 
 The vendor `ttyFIQ0` getty was moved from `getty.target.wants/` to
 `/etc/systemd/system/dev-ttyFIQ0.device.wants/`:
@@ -168,6 +168,13 @@ If access is lost, disable it at the console: `pvesh set
 `/etc/pve/firewall/cluster.fw`.
 
 ## Wi-Fi and Bluetooth (AP6275P)
+
+**Not in use; the module is dead.** Since 2026-11-16 the files in this
+section are not installed on PVE: no `firefly-dt-ap6275p`, no
+`brcmfmac-after-bt` files, and `rk3588-bluetooth.service` disabled.
+`firefly-esp-mainline` then copies Debian's DTB unchanged. See
+[the restore record](emmc-image-restore.md). The description below is
+kept for a replacement module.
 
 The board's AP6275P module is a BCM43752: Wi-Fi on `pcie2x1l0`
 (`/pcie@fe170000`), Bluetooth on UART6 (`/serial@feb90000`). The mainline

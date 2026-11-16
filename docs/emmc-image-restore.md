@@ -104,6 +104,21 @@ not respond. No device appeared on `0002:21`, and Bluetooth timed out
 
 A cold power cycle (power removed for about 10 s, then a mainline boot)
 gave the same result. The system reached `running` and the firewall came
-up, so the firewall persists across a reboot. Wi-Fi and Bluetooth remain
-open: the control lines match the Arch Linux ARM boot of 2026-10-25,
-where the module worked, but the chip does not respond.
+up, so the firewall persists across a reboot.
+
+The module is dead. According to the user, it stopped working after a
+crash during HDMI1 experiments in early November and also fails with
+Firefly's stock firmware. Fedora's journal shows the same Bluetooth
+timeout on every boot from 2026-11-01 onwards. The fuller record is in
+fedora-firefly-uefi's `docs/bring-up.md`.
+
+The AP6275P setup was therefore removed from PVE on 2026-11-16:
+
+- `/usr/local/sbin/firefly-dt-ap6275p` was deleted, so
+  `firefly-esp-mainline` copies Debian's DTB unchanged. The regenerated
+  ESP DTB is identical to the package's, so `sata1` is back to stock and
+  UART6 is disabled.
+- `brcmfmac-after-bt.service` and `brcmfmac-after-bt.conf` were removed.
+- The vendor `rk3588-bluetooth.service` was disabled.
+
+This takes effect at the next boot. `bluez` stays installed.
